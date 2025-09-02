@@ -1,0 +1,42 @@
+body {
+    margin: 0;
+    padding: 20px;
+    font-family: Arial, sans-serif;
+    background: #1a1a2e;
+    color: white;
+}
+
+.controls {
+    margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+button {
+    padding: 8px 16px;
+    background: #16213e;
+    color: white;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #0f3460;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+input[type="range"] {
+    width: 100px;
+}
+
+#sketch-container {
+    border: 2px solid #0f3460;
+    border-radius: 8px;
+    overflow: hidden;
+}
