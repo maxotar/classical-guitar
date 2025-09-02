@@ -2,8 +2,7 @@
 class AudioEngine {
     constructor() {
         this.audioEnabled = false;
-        this.synth = null;
-        this.reverb = null;
+        this.sampler = null;
         this.isInitialized = false;
         console.log('AudioEngine created');
     }
@@ -11,48 +10,76 @@ class AudioEngine {
     async initializeAudio() {
         try {
             console.log('Starting audio initialization...');
-            console.log('Tone context state before start:', Tone.context.state);
-
-            // Wait for user interaction before initializing
             await Tone.start();
-            console.log('Tone.start() completed');
-            console.log('Tone context state after start:', Tone.context.state);
+            console.log('Tone.js started');
 
-            // Classical guitar-inspired synthesizer
-            console.log('Creating PluckSynth...');
-            this.synth = new Tone.PluckSynth({
-                attackNoise: 1,
-                dampening: 4000,
-                resonance: 0.9,
-                release: 1
+            // Map every WAV file in /samples to its pitch
+            const sampleMap = {
+                "A#1": "samples/A#1.wav",
+                "A#3": "samples/A#3.wav",
+                "A#4": "samples/A#4.wav",
+                "A#5": "samples/A#5.wav",
+                "A1": "samples/A1.wav",
+                "A2": "samples/A2.wav",
+                "A3": "samples/A3.wav",
+                "A4": "samples/A4.wav",
+                "A5": "samples/A5.wav",
+                "B1": "samples/B1.wav",
+                "B2": "samples/B2.wav",
+                "B3": "samples/B3.wav",
+                "B4": "samples/B4.wav",
+                "B5": "samples/B5.wav",
+                "C#2": "samples/C#2.wav",
+                "C#4": "samples/C#4.wav",
+                "C#5": "samples/C#5.wav",
+                "C2": "samples/C2.wav",
+                "C3": "samples/C3.wav",
+                "C4": "samples/C4.wav",
+                "C5": "samples/C5.wav",
+                "C6": "samples/C6.wav",
+                "D#2": "samples/D#2.wav",
+                "D#4": "samples/D#4.wav",
+                "D#5": "samples/D#5.wav",
+                "D2": "samples/D2.wav",
+                "D3": "samples/D3.wav",
+                "D4": "samples/D4.wav",
+                "D5": "samples/D5.wav",
+                "E2": "samples/E2.wav",
+                "E3": "samples/E3.wav",
+                "E4": "samples/E4.wav",
+                "E5": "samples/E5.wav",
+                "F#3": "samples/F#3.wav",
+                "F#4": "samples/F#4.wav",
+                "F#5": "samples/F#5.wav",
+                "F2": "samples/F2.wav",
+                "F3": "samples/F3.wav",
+                "F4": "samples/F4.wav",
+                "F5": "samples/F5.wav",
+                "G#1": "samples/G#1.wav",
+                "G#3": "samples/G#3.wav",
+                "G#5": "samples/G#5.wav",
+                "G1": "samples/G1.wav",
+                "G2": "samples/G2.wav",
+                "G3": "samples/G3.wav",
+                "G4": "samples/G4.wav",
+                "G5": "samples/G5.wav"
+            };
+
+            return new Promise((resolve, reject) => {
+                this.sampler = new Tone.Sampler(sampleMap, {
+                    onload: () => {
+                        console.log('Sampler loaded and ready');
+                        this.isInitialized = true;
+                        resolve(true);
+                    },
+                    onerror: (error) => {
+                        console.error('Error loading samples:', error);
+                        reject(error);
+                    }
+                }).toDestination();
             });
-            console.log('PluckSynth created:', this.synth);
-
-            // Add some reverb for classical guitar ambience
-            console.log('Creating Reverb...');
-            this.reverb = new Tone.Reverb({
-                decay: 1.5,
-                wet: 0.2
-            });
-            console.log('Reverb created:', this.reverb);
-
-            // Connect to reverb then to destination
-            console.log('Connecting audio chain...');
-            this.synth.connect(this.reverb);
-            this.reverb.toDestination();
-            console.log('Audio chain connected');
-
-            // Test audio immediately
-            console.log('Testing audio with C4...');
-            this.synth.triggerAttackRelease('C4', '8n');
-            console.log('Test note triggered');
-
-            this.isInitialized = true;
-            console.log('Audio initialization complete!');
-            return true;
         } catch (error) {
             console.error('Audio initialization failed:', error);
-            console.error('Error stack:', error.stack);
             return false;
         }
     }
@@ -81,40 +108,21 @@ class AudioEngine {
         }
 
         try {
-            // Convert to Tone.js format
-            let note = this.convertPitchToTone(pitch);
-            console.log(`Playing note: ${pitch} -> ${note}, duration: ${duration}`);
-            console.log('Synth state:', this.synth);
-            console.log('Tone context state:', Tone.context.state);
-
-            this.synth.triggerAttackRelease(note, duration);
-            console.log('Note triggered successfully');
+            this.sampler.triggerAttackRelease(pitch, duration);
+            console.log(`Sample played: ${pitch}`);
         } catch (error) {
             console.error('Error playing note:', error);
-            console.error('Error details:', error.message);
+            // If the note fails, try playing C4 as a fallback
+            try {
+                this.sampler.triggerAttackRelease('C4', duration);
+                console.log(`Fallback to C4 for pitch: ${pitch}`);
+            } catch (fallbackError) {
+                console.error('Fallback also failed:', fallbackError);
+            }
         }
     }
 
-    convertPitchToTone(pitch) {
-        // Convert our pitch notation to Tone.js format
-        const pitchMap = {
-            'E4': 'E4',
-            'F4': 'F4',
-            'G4': 'G4',
-            'A4': 'A4',
-            'B4': 'B4',
-            'C5': 'C5',
-            'D5': 'D5',
-            'E5': 'E5',
-            'B3': 'B3',
-            'C4': 'C4',
-            'D4': 'D4',
-            'G3': 'G3'
-        };
-        const result = pitchMap[pitch] || 'C4';
-        console.log(`Pitch conversion: ${pitch} -> ${result}`);
-        return result;
-    }
+    // No longer needed: convertPitchToTone
 }
 // Event Bus Pattern
 class EventBus {
