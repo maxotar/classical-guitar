@@ -11,6 +11,7 @@ class AudioEngine {
         try {
             console.log('Starting audio initialization...');
             await Tone.start();
+            Tone.Transport.start();
             console.log('Tone.js started');
 
             // Map every WAV file in /samples to its pitch
@@ -66,6 +67,15 @@ class AudioEngine {
             };
 
             return new Promise((resolve, reject) => {
+                // Create effects chain
+                this.reverb = new Tone.Reverb({
+                    decay: 2,
+                    wet: 0.2
+                }).toDestination();
+
+                this.limiter = new Tone.Limiter(-6).connect(this.reverb);
+
+                // Create sampler with envelope settings
                 this.sampler = new Tone.Sampler(sampleMap, {
                     onload: () => {
                         console.log('Sampler loaded and ready');
@@ -75,8 +85,11 @@ class AudioEngine {
                     onerror: (error) => {
                         console.error('Error loading samples:', error);
                         reject(error);
-                    }
-                }).toDestination();
+                    },
+                    attack: 0.005,
+                    release: 0.3,
+                    volume: -6
+                }).connect(this.limiter);
             });
         } catch (error) {
             console.error('Audio initialization failed:', error);
@@ -100,22 +113,26 @@ class AudioEngine {
     }
 
     playNote(pitch, duration = 0.5) {
-        console.log(`playNote called: pitch=${pitch}, duration=${duration}, enabled=${this.audioEnabled}, initialized=${this.isInitialized}`);
-
         if (!this.audioEnabled || !this.isInitialized || pitch === 'rest') {
-            console.log('Skipping note play - conditions not met');
             return;
         }
 
         try {
-            this.sampler.triggerAttackRelease(pitch, duration);
-            console.log(`Sample played: ${pitch}`);
+            // Ensure we're in a valid state to play
+            if (Tone.context.state !== 'running') {
+                return;
+            }
+
+            // Play the note immediately
+            this.sampler.triggerAttackRelease(pitch, duration, Tone.now(), 0.8);
+            console.log(`Playing note: ${pitch}, duration: ${duration}`);
+
         } catch (error) {
             console.error('Error playing note:', error);
-            // If the note fails, try playing C4 as a fallback
             try {
-                this.sampler.triggerAttackRelease('C4', duration);
-                console.log(`Fallback to C4 for pitch: ${pitch}`);
+                // Fallback to C4
+                this.sampler.triggerAttackRelease('C4', duration, Tone.now(), 0.6);
+                console.log('Fallback to C4');
             } catch (fallbackError) {
                 console.error('Fallback also failed:', fallbackError);
             }
@@ -201,8 +218,36 @@ class Note {
     }
 
     draw() {
-        // Draw note on staff
         push();
+        const staffBottomY = 170; // Y position of bottom staff line
+        const staffTopY = 130;    // Y position of top staff line
+        let noteY = this.getNoteY();
+
+        if (this.pitch !== 'rest') {
+            stroke(this.active ? color(255, 255, 100) : 100);
+            strokeWeight(1);
+
+            // Draw ledger lines if note is below staff
+            if (noteY > staffBottomY) {
+                let linesNeeded = Math.floor((noteY - staffBottomY) / 10);
+                for (let i = 1; i <= linesNeeded; i++) {
+                    let lineY = staffBottomY + (i * 10);
+                    // Draw ledger line extending slightly beyond the note
+                    line(this.x - 15, lineY, this.x + 15, lineY);
+                }
+            }
+
+            // Draw ledger lines if note is above staff
+            if (noteY < staffTopY) {
+                let linesNeeded = Math.floor((staffTopY - noteY) / 10);
+                for (let i = 1; i <= linesNeeded; i++) {
+                    let lineY = staffTopY - (i * 10);
+                    line(this.x - 15, lineY, this.x + 15, lineY);
+                }
+            }
+        }
+
+        // Draw note
         if (this.active) {
             fill(255, 200, 100);
             stroke(255, 255, 100);
@@ -215,34 +260,49 @@ class Note {
         }
 
         strokeWeight(2);
-        let noteY = this.getNoteY();
         ellipse(this.x, noteY, 20, 15);
 
         // Draw stem
         if (this.pitch !== 'rest') {
             stroke(this.active ? color(255, 255, 100) : 255);
             line(this.x + 8, noteY, this.x + 8, noteY - 40);
+
+            // Draw note name above the note
+            noStroke();
+            fill(255);
+            textAlign(CENTER);
+            textSize(12);
+            text(this.pitch, this.x, noteY - 45);
         }
         pop();
     }
 
     getNoteY() {
-        // Simplified staff positioning
-        const staffY = 150;
+        // Staff positioning for treble clef
+        const staffY = 130;  // Y position of the top staff line
+        const lineSpacing = 10;  // Space between staff lines
         const notePositions = {
-            'E4': staffY + 40,  // 1st string open
-            'F4': staffY + 35,
-            'G4': staffY + 30,
-            'A4': staffY + 25,
-            'B4': staffY + 20,
-            'C5': staffY + 15,
-            'D5': staffY + 10,
-            'E5': staffY + 5,
-            'B3': staffY + 50,  // 2nd string open
-            'C4': staffY + 45,
-            'D4': staffY + 40,
-            'G3': staffY + 60,  // 3rd string open
-            'rest': staffY + 25
+            // Notes on or within the staff (from bottom to top line)
+            'D4': staffY + (4.5 * lineSpacing),  // Space below bottom line
+            'E4': staffY + (4 * lineSpacing),    // Bottom line
+            'F4': staffY + (3.5 * lineSpacing),  // Space above bottom line
+            'G4': staffY + (3 * lineSpacing),    // Second line
+            'A4': staffY + (2.5 * lineSpacing),  // Space above second line
+            'B4': staffY + (2 * lineSpacing),  // Middle line
+            'C5': staffY + (1.5 * lineSpacing),
+            'D5': staffY + lineSpacing,        // Second from top
+            'E5': staffY + (0.5 * lineSpacing),
+            'F5': staffY,                      // Top line
+
+            // Notes below the staff
+            'C4': staffY + (5 * lineSpacing),    // First ledger line below
+            'B3': staffY + (5.5 * lineSpacing),  // Space below first ledger
+            'A3': staffY + (6 * lineSpacing),    // Second ledger line below
+            'G3': staffY + (6.5 * lineSpacing),  // Space below second ledger
+            'F3': staffY + (7 * lineSpacing),    // Third ledger line below
+            'E3': staffY + (7.5 * lineSpacing),  // Space below third ledger
+
+            'rest': staffY + (3 * lineSpacing)   // Rest appears on middle line
         };
         return notePositions[this.pitch] || staffY + 25;
     }
@@ -253,15 +313,39 @@ class PatternGenerator {
     constructor(eventBus) {
         this.eventBus = eventBus;
         this.patterns = [
-            // C Major arpeggio pattern
-            [{ pitch: 'C4', fret: 1, string: 2 }, { pitch: 'E4', fret: 0, string: 1 },
-            { pitch: 'G4', fret: 3, string: 1 }, { pitch: 'C5', fret: 8, string: 1 }],
-            // A minor arpeggio
-            [{ pitch: 'A4', fret: 5, string: 1 }, { pitch: 'C5', fret: 8, string: 1 },
-            { pitch: 'E5', fret: 12, string: 1 }, { pitch: 'A4', fret: 5, string: 1 }],
-            // Simple scale passage
-            [{ pitch: 'G4', fret: 3, string: 1 }, { pitch: 'A4', fret: 5, string: 1 },
-            { pitch: 'B4', fret: 7, string: 1 }, { pitch: 'C5', fret: 8, string: 1 }]
+            // All open strings
+            [
+                { pitch: 'E5', fret: 0, string: 1 },  // 1st string open (high E)
+                { pitch: 'B4', fret: 0, string: 2 },  // 2nd string open (B)
+                { pitch: 'G4', fret: 0, string: 3 },  // 3rd string open (G)
+                { pitch: 'D4', fret: 0, string: 4 },  // 4th string open (D)
+                { pitch: 'A3', fret: 0, string: 5 },  // 5th string open (A)
+                { pitch: 'E3', fret: 0, string: 6 }   // 6th string open (low E)
+            ],
+            // C chord (first position)
+            [
+                { pitch: 'E5', fret: 0, string: 1 },  // 1st string open (sounds E4)
+                { pitch: 'C5', fret: 1, string: 2 },  // 2nd string fret 1 (sounds C4)
+                { pitch: 'G4', fret: 0, string: 3 },  // 3rd string open (sounds G3)
+                { pitch: 'E4', fret: 2, string: 4 },  // 4th string fret 2 (sounds E3)
+                { pitch: 'C4', fret: 3, string: 5 }   // 5th string fret 3 (sounds C3)
+            ],
+            // G chord (first position)
+            [
+                { pitch: 'G5', fret: 3, string: 1 },  // 1st string fret 3 (sounds G4)
+                { pitch: 'B4', fret: 0, string: 2 },  // 2nd string open (sounds B3)
+                { pitch: 'G4', fret: 0, string: 3 },  // 3rd string open (sounds G3)
+                { pitch: 'D4', fret: 0, string: 4 },  // 4th string open (sounds D3)
+                { pitch: 'G3', fret: 3, string: 6 }   // 6th string fret 3 (sounds G2)
+            ],
+            // First position scale fragment
+            [
+                { pitch: 'E5', fret: 0, string: 1 },  // 1st string open (sounds E4)
+                { pitch: 'F5', fret: 1, string: 1 },  // 1st string fret 1 (sounds F4)
+                { pitch: 'G5', fret: 3, string: 1 },  // 1st string fret 3 (sounds G4)
+                { pitch: 'B4', fret: 0, string: 2 },  // 2nd string open (sounds B3)
+                { pitch: 'C5', fret: 1, string: 2 }   // 2nd string fret 1 (sounds C4)
+            ]
         ];
     }
 
@@ -288,21 +372,26 @@ class Player {
 
         this.eventBus.on('tempoChanged', (tempo) => {
             this.tempo = tempo;
-            this.noteSpeed = map(tempo, 60, 180, 0.5, 2);
+            // One beat (quarter note) should move 60 pixels at the given tempo
+            this.noteSpeed = (tempo / 60) * 1;  // pixels per frame at 60fps
         });
     }
 
     loadPattern(pattern) {
+        this.currentPattern = pattern;  // Store the current pattern for replay
         this.notes = [];
         this.playPosition = 0;
-        let spacing = 100;
+        // Calculate spacing based on tempo and display
+        let spacing = 60;  // Pixels between notes
+        let leadInBeats = 4;  // Number of beats before first note
+        let startX = 200 + (leadInBeats * spacing); // Start 4 beats ahead of play line
 
         pattern.forEach((noteData, i) => {
             let note = new Note(
                 noteData.pitch,
                 noteData.fret,
                 noteData.string,
-                width + i * spacing
+                startX + i * spacing
             );
             this.notes.push(note);
         });
@@ -320,6 +409,8 @@ class Player {
 
     setPosition(pos) {
         this.playPosition = pos;
+        // Reset all notes to their original positions and state
+        this.loadPattern(this.currentPattern);
     }
 
     update() {
@@ -328,17 +419,25 @@ class Player {
         this.notes.forEach(note => {
             note.update(this.noteSpeed);
 
-            // Check if note is at play line
-            if (abs(note.x - 200) < 10 && !note.played) {
+            // Check if note is exactly at play line to prevent multiple triggers
+            if (Math.abs(note.x - 200) < 2 && !note.played) {
                 note.active = true;
+                // Reset all previously played notes when first note is hit
+                if (this.notes.every(n => !n.played)) {
+                    this.eventBus.emit('playbackStarted');
+                }
                 // Play the note with tempo-based duration
                 let noteDuration = 60 / this.tempo; // Quarter note duration in seconds
-                this.audioEngine.playNote(note.pitch, noteDuration);
+
+                // Add a slight delay to ensure clean playback
+                Tone.Draw.schedule(() => {
+                    this.audioEngine.playNote(note.pitch, noteDuration);
+                }, '+0.001');
 
                 setTimeout(() => {
                     note.active = false;
                     note.played = true;
-                }, 500);
+                }, noteDuration * 1000);
             }
         });
     }
